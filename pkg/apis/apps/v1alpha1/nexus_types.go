@@ -75,6 +75,8 @@ type NexusSpec struct {
 	// GenerateRandomAdminPassword enables the random password generation.
 	// Defaults to `false`: the default password for a newly created instance is 'admin123', which should be changed in the first login.
 	// If set to `true`, you must use the automatically generated 'admin' password, stored in the container's file system at `/nexus-data/admin.password`.
+	// The operator uses the default credentials to create a user for itself to create default repositories.
+	// If set to `true`, the repositories won't be created since the operator won't fetch for the random password.
 	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors=true
 	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors.displayName="Generate Random Admin Password"
 	// +optional
@@ -100,6 +102,10 @@ type NexusSpec struct {
 	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors=false
 	// +optional
 	ReadinessProbe *NexusProbe `json:"readinessProbe,omitempty"`
+
+	// DisableDefaultRepos disables the auto-creation of Apache, JBoss and Red Hat and to add them to the Maven Public group in this Nexus instance.
+	// Default to false (always try to create the repos). Set this to true to not create them. Only works if 'GenerateRandomAdminPassword' is false.
+	DisableDefaultRepos bool `json:"disableDefaultRepos,omitempty"`
 }
 
 // NexusPersistence is the structure for the data persistent
@@ -191,11 +197,21 @@ type NexusStatus struct {
 	// +operator-sdk:gen-csv:customresourcedefinitions.statusDescriptors=true
 	// +operator-sdk:gen-csv:customresourcedefinitions.statusDescriptors.displayName="appsv1.DeploymentStatus"
 	DeploymentStatus v1.DeploymentStatus `json:"deploymentStatus,omitempty"`
-	// Will be "OK" when all objects are created successfully
-	NexusStatus string `json:"nexusStatus,omitempty"`
+	// Will be "OK" when this Nexus instance is up
+	NexusStatus NexusStatusType `json:"nexusStatus,omitempty"`
+	// Gives more information about a failure status
+	Reason string `json:"reason,omitempty"`
 	// Route for external service access
 	NexusRoute string `json:"nexusRoute,omitempty"`
 }
+
+type NexusStatusType string
+
+const (
+	NexusStatusOK      NexusStatusType = "OK"
+	NexusStatusFailure NexusStatusType = "Failure"
+	NexusStatusPending NexusStatusType = "Pending"
+)
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 

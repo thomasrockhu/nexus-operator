@@ -213,7 +213,7 @@ func schema_pkg_apis_apps_v1alpha1_NexusSpec(ref common.ReferenceCallback) commo
 					},
 					"generateRandomAdminPassword": {
 						SchemaProps: spec.SchemaProps{
-							Description: "GenerateRandomAdminPassword enables the random password generation. Defaults to `false`: the default password for a newly created instance is 'admin123', which should be changed in the first login. If set to `true`, you must use the automatically generated 'admin' password, stored in the container's file system at `/nexus-data/admin.password`.",
+							Description: "GenerateRandomAdminPassword enables the random password generation. Defaults to `false`: the default password for a newly created instance is 'admin123', which should be changed in the first login. If set to `true`, you must use the automatically generated 'admin' password, stored in the container's file system at `/nexus-data/admin.password`. The operator uses the default credentials to create a user for itself to create default repositories. If set to `true`, the repositories won't be created since the operator won't fetch for the random password.",
 							Type:        []string{"boolean"},
 							Format:      "",
 						},
@@ -243,6 +243,13 @@ func schema_pkg_apis_apps_v1alpha1_NexusSpec(ref common.ReferenceCallback) commo
 							Ref:         ref("./pkg/apis/apps/v1alpha1.NexusProbe"),
 						},
 					},
+					"disableDefaultRepos": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DisableDefaultRepos disables the auto-creation of Apache, JBoss and Red Hat and to add them to the Maven Public group in this Nexus instance. Default to false (always try to create the repos). Set this to true to not create them. Only works if 'GenerateRandomAdminPassword' is false.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
 				},
 				Required: []string{"replicas", "persistence", "useRedHatImage"},
 			},
@@ -267,7 +274,14 @@ func schema_pkg_apis_apps_v1alpha1_NexusStatus(ref common.ReferenceCallback) com
 					},
 					"nexusStatus": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Will be \"OK\" when all objects are created successfully",
+							Description: "Will be \"OK\" when this Nexus instance is up",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"reason": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Gives more information about a failure status",
 							Type:        []string{"string"},
 							Format:      "",
 						},
