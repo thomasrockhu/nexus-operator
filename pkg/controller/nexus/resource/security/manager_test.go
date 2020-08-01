@@ -20,14 +20,15 @@ package security
 import (
 	ctx "context"
 	"fmt"
+	"reflect"
+	"testing"
+
 	"github.com/m88i/nexus-operator/pkg/apis/apps/v1alpha1"
 	"github.com/m88i/nexus-operator/pkg/test"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"reflect"
-	"testing"
 )
 
 var baseNexus = &v1alpha1.Nexus{ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "nexus"}, Spec: v1alpha1.NexusSpec{ServiceAccountName: "nexus"}}
@@ -92,8 +93,9 @@ func TestManager_GetRequiredResources(t *testing.T) {
 	// even if the user specified a different one
 	resources, err := mgr.GetRequiredResources()
 	assert.Nil(t, err)
-	assert.Len(t, resources, 1)
+	assert.Len(t, resources, 2)
 	assert.True(t, test.ContainsType(resources, reflect.TypeOf(&corev1.ServiceAccount{})))
+	assert.True(t, test.ContainsType(resources, reflect.TypeOf(&corev1.Secret{})))
 }
 
 func TestManager_GetDeployedResources(t *testing.T) {
@@ -152,6 +154,10 @@ func TestManager_GetCustomComparator(t *testing.T) {
 	// there is no custom comparator function for Service Accounts
 	pvcComp := mgr.GetCustomComparator(reflect.TypeOf(&corev1.ServiceAccount{}))
 	assert.Nil(t, pvcComp)
+
+	// there is no custom comparator function for Service Accounts
+	secretComp := mgr.GetCustomComparator(reflect.TypeOf(&corev1.Secret{}))
+	assert.NotNil(t, secretComp)
 }
 
 func TestManager_GetCustomComparators(t *testing.T) {
@@ -161,5 +167,5 @@ func TestManager_GetCustomComparators(t *testing.T) {
 
 	// there is no custom comparator function for Service Accounts
 	comparators := mgr.GetCustomComparators()
-	assert.Nil(t, comparators)
+	assert.Len(t, comparators, 1)
 }

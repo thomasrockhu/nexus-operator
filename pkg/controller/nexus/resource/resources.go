@@ -19,12 +19,13 @@ package resource
 
 import (
 	"fmt"
+	"reflect"
+
 	"github.com/RHsyseng/operator-utils/pkg/resource/compare"
 	"github.com/m88i/nexus-operator/pkg/controller/nexus/resource/deployment"
 	"github.com/m88i/nexus-operator/pkg/controller/nexus/resource/networking"
 	"github.com/m88i/nexus-operator/pkg/controller/nexus/resource/persistence"
 	"github.com/m88i/nexus-operator/pkg/controller/nexus/resource/security"
-	"reflect"
 
 	"k8s.io/client-go/discovery"
 

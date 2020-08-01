@@ -18,15 +18,15 @@
 package security
 
 import (
-	ctx "context"
 	"fmt"
+	"reflect"
+
 	"github.com/RHsyseng/operator-utils/pkg/resource"
 	"github.com/m88i/nexus-operator/pkg/apis/apps/v1alpha1"
+	"github.com/m88i/nexus-operator/pkg/framework"
 	"github.com/m88i/nexus-operator/pkg/logger"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/types"
-	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -56,34 +56,45 @@ func (m *Manager) setDefaults() {
 	}
 }
 
+// makeDeployedGetters maps the functions to fetch deployed resources
+func (m *Manager) makeDeployedGetters() map[string]func() (resource.KubernetesResource, error) {
+	deployedGetters := make(map[string]func() (resource.KubernetesResource, error))
+	deployedGetters["Secret"] = m.getDeployedSecret
+	deployedGetters["Service Account"] = m.getDeployedSvcAccnt
+
+	return deployedGetters
+}
+
 // GetRequiredResources returns the resources initialized by the Manager
 func (m *Manager) GetRequiredResources() ([]resource.KubernetesResource, error) {
 	log.Debugf("Creating Service Account (%s)", m.nexus.Name)
-	svcAccnt := defaultServiceAccount(m.nexus)
-	return []resource.KubernetesResource{svcAccnt}, nil
+	return []resource.KubernetesResource{defaultServiceAccount(m.nexus), defaultSecret(m.nexus)}, nil
 }
 
 // GetDeployedResources returns the security resources deployed on the cluster
 func (m *Manager) GetDeployedResources() ([]resource.KubernetesResource, error) {
 	var resources []resource.KubernetesResource
-	if svcAccnt, err := m.getDeployedSvcAccnt(); err == nil {
-		resources = append(resources, svcAccnt)
-	} else if !errors.IsNotFound(err) {
-		log.Errorf("Could not fetch Service Account (%s): %v", m.nexus.Name, err)
-		return nil, fmt.Errorf("could not fetch service account (%s): %v", m.nexus.Name, err)
+	for resType, getter := range m.makeDeployedGetters() {
+		if r, err := getter(); err == nil {
+			resources = append(resources, r)
+		} else if !errors.IsNotFound(err) {
+			return nil, fmt.Errorf("could not fetch Resource %s (%s): %v", resType, m.nexus.Name, err)
+		}
 	}
 	return resources, nil
 }
 
+func (m *Manager) getDeployedSecret() (resource.KubernetesResource, error) {
+	secret := &core.Secret{}
+	if err := framework.Fetch(m.client, framework.Key(m.nexus), secret); err != nil {
+		return nil, err
+	}
+	return secret, nil
+}
+
 func (m *Manager) getDeployedSvcAccnt() (resource.KubernetesResource, error) {
 	account := &core.ServiceAccount{}
-	key := types.NamespacedName{Namespace: m.nexus.Namespace, Name: m.nexus.Name}
-	log.Debugf("Attempting to fetch deployed Service Account (%s)", m.nexus.Name)
-	err := m.client.Get(ctx.TODO(), key, account)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			log.Debugf("There is no deployed Service Account (%s)", m.nexus.Name)
-		}
+	if err := framework.Fetch(m.client, framework.Key(m.nexus), account); err != nil {
 		return nil, err
 	}
 	return account, nil
@@ -92,13 +103,16 @@ func (m *Manager) getDeployedSvcAccnt() (resource.KubernetesResource, error) {
 // GetCustomComparator returns the custom comp function used to compare a security resource.
 // Returns nil if there is none
 func (m *Manager) GetCustomComparator(t reflect.Type) func(deployed resource.KubernetesResource, requested resource.KubernetesResource) bool {
-	// As Service Accounts have a default comparator we just return nil here
+	if t == reflect.TypeOf(&core.Secret{}) {
+		return framework.AlwaysTrueComparator()
+	}
 	return nil
 }
 
 // GetCustomComparators returns all custom comp functions in a map indexed by the resource type
 // Returns nil if there are none
 func (m *Manager) GetCustomComparators() map[reflect.Type]func(deployed resource.KubernetesResource, requested resource.KubernetesResource) bool {
-	// As Service Accounts have a default comparator we just return nil here
-	return nil
+	return map[reflect.Type]func(deployed resource.KubernetesResource, requested resource.KubernetesResource) bool{
+		reflect.TypeOf(core.Secret{}): framework.AlwaysTrueComparator(),
+	}
 }
