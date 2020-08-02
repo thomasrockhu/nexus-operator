@@ -26,7 +26,7 @@ var communityMavenProxies = map[string]nexus.MavenProxyRepository{
 }
 
 const (
-	mavenCentralRepoId = "maven-central"
+	mavenCentralRepoID = "maven-central"
 )
 
 // RepositoryOperations describes the public operations in the repository domain for the Nexus instance
