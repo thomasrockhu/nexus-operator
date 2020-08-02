@@ -88,6 +88,11 @@ func TestReconcileNexus_Reconcile_NotPersistent(t *testing.T) {
 	assert.NotNil(t, nexus)
 	assert.False(t, nexus.Status.ServerOperationsStatus.ServerReady)
 	assert.NotEmpty(t, nexus.Status.ServerOperationsStatus.Reason)
+
+	// a second attempt must not requeue and not fail
+	res, err = r.Reconcile(req)
+	assert.NoError(t, err)
+	assert.False(t, res.Requeue)
 }
 
 func TestReconcileNexus_Reconcile_Persistent(t *testing.T) {
