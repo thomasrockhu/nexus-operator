@@ -196,11 +196,12 @@ func (r *ReconcileNexus) Reconcile(request reconcile.Request) (result reconcile.
 }
 
 func (r *ReconcileNexus) ensureServerUpdates(instance *appsv1alpha1.Nexus) error {
+	log.Info("Performing Nexus server operations if needed")
 	status, err := server.HandleServerOperations(instance, r.client)
 	if err != nil {
 		return err
 	}
-	log.Debugf("Server Operations finished. Status is %v", status)
+	log.Infof("Server Operations finished. Status is %v", status)
 	instance.Status.ServerOperationsStatus = status
 	return nil
 }
@@ -216,6 +217,7 @@ func (r *ReconcileNexus) updateNexusStatus(nexus *appsv1alpha1.Nexus, cache *app
 		nexus.Status.Reason = fmt.Sprintf("Failed to deploy Nexus: %s", *err)
 		nexus.Status.NexusStatus = appsv1alpha1.NexusStatusFailure
 	} else {
+		nexus.Status.Reason = ""
 		if nexus.Status.DeploymentStatus.AvailableReplicas > 0 {
 			nexus.Status.NexusStatus = appsv1alpha1.NexusStatusOK
 		} else {

@@ -26,7 +26,7 @@ var communityMavenProxies = map[string]nexus.MavenProxyRepository{
 }
 
 const (
-	mavenCentralRepoID = "maven-central"
+	mavenCentralRepoID = "maven-public"
 )
 
 // RepositoryOperations describes the public operations in the repository domain for the Nexus instance
@@ -54,6 +54,7 @@ func (r *repositoryOperation) EnsureCommunityMavenProxies() error {
 }
 
 func (r *repositoryOperation) addCommunityReposToMavenCentralGroup() error {
+	log.Debug("Attempt to fetch the Maven Central group repository")
 	mavenCentral, err := r.nexuscli.MavenGroupRepositoryService.GetRepoByName(mavenCentralRepoID)
 	if err != nil {
 		return err
@@ -64,23 +65,40 @@ func (r *repositoryOperation) addCommunityReposToMavenCentralGroup() error {
 	}
 
 	var newMembers []string
-	for _, member := range mavenCentral.Group.MemberNames {
-		if _, ok := communityMavenProxies[member]; !ok {
-			newMembers = append(newMembers, member)
+	for newMember := range communityMavenProxies {
+		found := false
+		for _, added := range mavenCentral.Group.MemberNames {
+			if newMember == added {
+				found = true
+				break
+			}
+		}
+		if !found {
+			newMembers = append(newMembers, newMember)
 		}
 	}
-	mavenCentral.Group.MemberNames = append(mavenCentral.Group.MemberNames, newMembers...)
 
-	err = r.nexuscli.MavenGroupRepositoryService.Update(*mavenCentral)
-	if err == nil {
-		r.status.MavenCentralUpdated = true
+	if len(newMembers) > 0 {
+		log.Debugf("Community repositories to be added in the Maven Central group: %v", newMembers)
+		mavenCentral.Group.MemberNames = append(mavenCentral.Group.MemberNames, newMembers...)
+
+		err = r.nexuscli.MavenGroupRepositoryService.Update(*mavenCentral)
+		if err == nil {
+			log.Debug("Maven Central updated with new community members")
+			r.status.MavenCentralUpdated = true
+		}
+		return err
 	}
-	return err
+	log.Debug("Community repositories already added to the Maven Central repo")
+	r.status.MavenCentralUpdated = true
+	return nil
 }
 
 func (r *repositoryOperation) createCommunityReposIfNotExists() error {
 	var reposToAdd []nexus.MavenProxyRepository
+	log.Debug("Attempt to create community repositories")
 	for _, repo := range communityMavenProxies {
+		log.Debugf("Trying to fetch repository %s", repo.Name)
 		fetchedRepo, err := r.nexuscli.MavenProxyRepositoryService.GetRepoByName(repo.Name)
 		if err != nil {
 			return err
@@ -90,29 +108,45 @@ func (r *repositoryOperation) createCommunityReposIfNotExists() error {
 		}
 	}
 	if len(reposToAdd) > 0 {
+		log.Debugf("Repositories to add %v", reposToAdd)
 		if err := r.nexuscli.MavenProxyRepositoryService.Add(reposToAdd...); err != nil {
 			return err
 		}
-		r.status.CommunityRepositoriesCreated = true
+		log.Debug("All repositories created")
 	}
+	log.Debug("Community repositories already created, skipping")
+	r.status.CommunityRepositoriesCreated = true
 	return nil
 }
 
 func defaultMavenProxyInstance(name, url string) nexus.MavenProxyRepository {
 	return nexus.MavenProxyRepository{
+		Proxy: nexus.Proxy{
+			MetadataMaxAge: 1440,
+			RemoteURL:      url,
+			ContentMaxAge:  -1,
+		},
 		Repository: nexus.Repository{
-			URL:    nexus.NewString(url),
+			Online: nexus.NewBool(true),
 			Format: nexus.NewRepositoryFormat(nexus.RepositoryFormatMaven2),
 			Name:   name,
 			Type:   nexus.NewRepositoryType(nexus.RepositoryTypeProxy),
 		},
 		Storage: nexus.Storage{
 			BlobStoreName:               "default",
-			StrictContentTypeValidation: false,
+			StrictContentTypeValidation: true,
+		},
+		NegativeCache: nexus.NegativeCache{
+			Enabled:    true,
+			TimeToLive: 1440,
 		},
 		Maven: nexus.Maven{
 			VersionPolicy: nexus.VersionPolicyRelease,
 			LayoutPolicy:  nexus.LayoutPolicyPermissive,
+		},
+		HTTPClient: nexus.HTTPClient{
+			Blocked:   nexus.NewBool(false),
+			AutoBlock: true,
 		},
 	}
 }

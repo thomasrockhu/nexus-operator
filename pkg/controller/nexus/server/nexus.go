@@ -20,6 +20,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"os"
 
 	nexusapi "github.com/m88i/aicura/nexus"
 	"github.com/m88i/nexus-operator/pkg/apis/apps/v1alpha1"
@@ -36,6 +37,13 @@ type server struct {
 	nexuscli  *nexusapi.Client
 	status    *v1alpha1.OperationsStatus
 }
+
+const (
+	defaultAdminUsername = "admin"
+	defaultAdminPassword = "admin123"
+	// used when running the operator instance locally
+	serverURLEnvKey = "NEXUS_SERVER_URL"
+)
 
 var log = logger.GetLogger("server_operations")
 
@@ -76,6 +84,11 @@ func HandleServerOperations(nexus *v1alpha1.Nexus, client client.Client) (v1alph
 }
 
 func (s *server) getNexusEndpoint() (string, error) {
+	externalURL := os.Getenv(serverURLEnvKey)
+	if len(externalURL) > 0 {
+		return externalURL, nil
+	}
+
 	svc := &corev1.Service{}
 	if err := s.k8sclient.Get(context.TODO(), types.NamespacedName{Name: s.nexus.Name, Namespace: s.nexus.Namespace}, svc); errors.IsNotFound(err) {
 		return "", nil
