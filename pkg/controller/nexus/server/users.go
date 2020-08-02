@@ -41,33 +41,58 @@ const (
 	secretKeyUsername = "server-user-username"
 )
 
-func (s *server) ensureOperatorUser() (*nexus.User, error) {
+type UserOperations interface {
+	EnsureOperatorUser() error
+}
+
+type userOperation struct {
+	server
+}
+
+func userOperations(server *server) UserOperations {
+	return &userOperation{server: *server}
+}
+
+func (u *userOperation) EnsureOperatorUser() error {
+	user, err := u.createOperatorUserIfNotExists()
+	if err != nil {
+		return err
+	}
+	_, pass, err := u.getOperatorUserCredentials()
+	if err != nil {
+		return err
+	}
+	u.nexuscli.SetCredentials(user.UserID, pass)
+	return nil
+}
+
+func (u *userOperation) createOperatorUserIfNotExists() (*nexus.User, error) {
 	// TODO: open an issue to handle access to a custom admin credentials to be used by the operator
-	s.nexuscli.SetCredentials(defaultAdminUsername, defaultAdminPassword)
-	user, err := s.nexuscli.UserService.GetUserByID(operatorUsername)
+	u.nexuscli.SetCredentials(defaultAdminUsername, defaultAdminPassword)
+	user, err := u.nexuscli.UserService.GetUserByID(operatorUsername)
 	if err != nil {
 		return nil, err
 	}
 	if user != nil {
 		return user, nil
 	}
-	user, err = createOperatorUserInstance()
+	user, err = u.createOperatorUserInstance()
 	if err != nil {
 		return nil, err
 	}
-	if err := s.nexuscli.UserService.Add(*user); err != nil {
+	if err := u.nexuscli.UserService.Add(*user); err != nil {
 		return nil, err
 	}
-	if err := s.storeOperatorUserCredentials(user); err != nil {
-		//  TODO: in case of an error here, we should remove the user from the Nexus database. Edge case, but an user could manually add the credentials later to the secret with a manually created user for us.
+	if err := u.storeOperatorUserCredentials(user); err != nil {
+		//  TODO: in case of an error here, we should remove the user from the Nexus database. Edge case: an user could manually add the credentials later to the secret with a manually created user for us.
 		return nil, err
 	}
 	return user, nil
 }
 
-func (s *server) storeOperatorUserCredentials(user *nexus.User) error {
+func (u *userOperation) storeOperatorUserCredentials(user *nexus.User) error {
 	secret := &corev1.Secret{}
-	if err := framework.Fetch(s.k8sclient, framework.Key(s.nexus), secret); err != nil {
+	if err := framework.Fetch(u.k8sclient, framework.Key(u.nexus), secret); err != nil {
 		return err
 	}
 	if secret.StringData == nil {
@@ -75,22 +100,22 @@ func (s *server) storeOperatorUserCredentials(user *nexus.User) error {
 	}
 	secret.StringData[secretKeyPassword] = user.Password
 	secret.StringData[secretKeyUsername] = user.UserID
-	if err := s.k8sclient.Update(context.TODO(), secret); err != nil {
+	if err := u.k8sclient.Update(context.TODO(), secret); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (s *server) getOperatorUserCredentials() (user, password string, err error) {
+func (u *userOperation) getOperatorUserCredentials() (user, password string, err error) {
 	secret := &corev1.Secret{}
-	if err := framework.Fetch(s.k8sclient, framework.Key(s.nexus), secret); err != nil {
+	if err := framework.Fetch(u.k8sclient, framework.Key(u.nexus), secret); err != nil {
 		return "", "", err
 	}
 	return secret.StringData[secretKeyUsername], secret.StringData[secretKeyPassword], nil
 }
 
-func createOperatorUserInstance() (*nexus.User, error) {
-	password, err := generateRandomPassword()
+func (u *userOperation) createOperatorUserInstance() (*nexus.User, error) {
+	password, err := u.generateRandomPassword()
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +131,7 @@ func createOperatorUserInstance() (*nexus.User, error) {
 	}, nil
 }
 
-func generateRandomPassword() (string, error) {
+func (u *userOperation) generateRandomPassword() (string, error) {
 	uid, err := uuid.NewRandom()
 	if err != nil {
 		return "", nil

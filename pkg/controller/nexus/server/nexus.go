@@ -41,7 +41,6 @@ var log = logger.GetLogger("server_operations")
 func HandleServerOperations(nexus *v1alpha1.Nexus, client client.Client) error {
 	log.Debug("Initializing server operations in instance %s", nexus.Name)
 	s := server{nexus: nexus, k8sclient: client}
-	// should we make operations in the server?
 	if !nexus.Spec.GenerateRandomAdminPassword && s.isServerReady() {
 		internalEndpoint, err := s.getNexusEndpoint()
 		if err != nil {
@@ -51,22 +50,18 @@ func HandleServerOperations(nexus *v1alpha1.Nexus, client client.Client) error {
 			log.Warnf("Impossible to resolve endpoint for Nexus instance %s", nexus.Name)
 			return nil
 		}
+		// TODO: create an injection point for API creation
 		s.nexuscli = nexusapi.
 			NewClient(internalEndpoint).
 			WithCredentials(defaultAdminUsername, defaultAdminPassword).
 			Build()
 
-		// all operations must be made by our users from now on
-		user, err := s.ensureOperatorUser()
-		if err != nil {
+		if err := userOperations(&s).EnsureOperatorUser(); err != nil {
 			return err
 		}
-		_, pass, err := s.getOperatorUserCredentials()
-		if err != nil {
+		if err := repositoryOperations(&s).EnsureCommunityMavenProxies(); err != nil {
 			return err
 		}
-		s.nexuscli.SetCredentials(user.UserID, pass)
-
 	}
 	return nil
 }
