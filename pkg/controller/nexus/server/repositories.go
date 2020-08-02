@@ -46,7 +46,7 @@ func (r *repositoryOperation) EnsureCommunityMavenProxies() error {
 	if err := r.createCommunityReposIfNotExists(); err != nil {
 		return err
 	}
-	mavenCentral, err := r.nexuscli.MavenGroupRepositoryService.GetRepoByName(mavenCentralRepoId)
+	mavenCentral, err := r.nexuscli.MavenGroupRepositoryService.GetRepoByName(mavenCentralRepoID)
 	if err != nil {
 		return err
 	}
