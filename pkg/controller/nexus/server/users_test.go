@@ -18,18 +18,15 @@
 package server
 
 import (
-	"context"
 	"testing"
 
-	"github.com/m88i/nexus-operator/pkg/framework"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func Test_userOperation_EnsureOperatorUser(t *testing.T) {
-	secret := &corev1.Secret{ObjectMeta: v1.ObjectMeta{Name: "nexus3", Namespace: t.Name()}}
-	server, client := createNewServerAndKubeCli(t, secret)
+	server, _ := createNewServerAndKubeCli(t, &corev1.Secret{ObjectMeta: v1.ObjectMeta{Name: "nexus3", Namespace: t.Name()}})
 
 	err := userOperations(server).EnsureOperatorUser()
 	assert.NoError(t, err)
@@ -37,11 +34,5 @@ func Test_userOperation_EnsureOperatorUser(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, user)
 	assert.Equal(t, operatorUsername, user.UserID)
-
-	err = client.Get(context.TODO(), framework.Key(secret), secret)
-	assert.NoError(t, err)
-	/*
-		assert.Equal(t, operatorUsername, secret.StringData[secretKeyUsername])
-		assert.NotEmpty(t, secret.StringData[secretKeyPassword])
-	*/
+	assert.True(t, server.status.OperatorUserCreated)
 }

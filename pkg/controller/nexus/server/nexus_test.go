@@ -46,13 +46,13 @@ func createNewServerAndKubeCli(t *testing.T, objects ...runtime.Object) (*server
 		nexus:     nexusInstance,
 		k8sclient: client,
 		nexuscli:  nexus.NewFakeClient(),
-		status:    &OperationStatus{},
+		status:    &v1alpha1.OperationsStatus{},
 	}
 
 	return server, client
 }
 
-func nexusApiFakeBuilder(url, user, pass string) *nexus.Client {
+func nexusAPIFakeBuilder(url, user, pass string) *nexus.Client {
 	return nexus.NewFakeClient()
 }
 
@@ -102,7 +102,7 @@ func Test_server_isServerReady(t *testing.T) {
 			},
 		},
 	}
-	s := server{nexus: nexus}
+	s := server{nexus: nexus, status: &v1alpha1.OperationsStatus{}}
 	assert.True(t, s.isServerReady())
 }
 
@@ -134,7 +134,7 @@ func Test_handleServerOperations(t *testing.T) {
 		},
 	}
 	cli := test.NewFakeClientBuilder(nexus, svc, &corev1.Secret{ObjectMeta: v1.ObjectMeta{Name: nexus.Name, Namespace: nexus.Namespace}}).Build()
-	status, err := handleServerOperations(nexus, cli, nexusApiFakeBuilder)
+	status, err := handleServerOperations(nexus, cli, nexusAPIFakeBuilder)
 	assert.NoError(t, err)
 	assert.NotNil(t, status)
 	assert.True(t, status.CommunityRepositoriesCreated)

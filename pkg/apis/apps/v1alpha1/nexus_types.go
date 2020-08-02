@@ -103,9 +103,10 @@ type NexusSpec struct {
 	// +optional
 	ReadinessProbe *NexusProbe `json:"readinessProbe,omitempty"`
 
-	// DisableDefaultRepos disables the auto-creation of Apache, JBoss and Red Hat and to add them to the Maven Public group in this Nexus instance.
-	// Default to false (always try to create the repos). Set this to true to not create them. Only works if 'GenerateRandomAdminPassword' is false.
-	DisableDefaultRepos bool `json:"disableDefaultRepos,omitempty"`
+	// ServerOperations describes the options for the operations made in the deployed server instance
+	// +operator-sdk:gen-csv:customresourcedefinitions.specDescriptors=true
+	// +optional
+	ServerOperations ServerOperationsOpts `json:"serverOperations,omitempty"`
 }
 
 // NexusPersistence is the structure for the data persistent
@@ -190,6 +191,18 @@ type NexusNetworkingTLS struct {
 	SecretName string `json:"secretName,omitempty"`
 }
 
+// ServerOperationsOpts describes the options for the operations performed in the Nexus server deployed instance
+type ServerOperationsOpts struct {
+	// DisableRepositoryCreation disables the auto-creation of Apache, JBoss and Red Hat repositories and the addition of them in
+	// the Maven Public group in this Nexus instance.
+	// Default to false (always try to create the repos). Set this to true to not create them. Only works if 'GenerateRandomAdminPassword' is false.
+	DisableRepositoryCreation bool `json:"disableRepositoryCreation,omitempty"`
+	// DisableOperatorUserCreation disables the auto-creation of the Nexus Operator user in the deployed server. This user is used to perform
+	// all the operations in the server (such as creting the community repos). If disabled, the operator will use the default `admin` user.
+	// Default to false (always create the user). It's recommended to not turn this to true to have traceability of the operations made by the operator.
+	DisableOperatorUserCreation bool `json:"disableOperatorUserCreation,omitempty"`
+}
+
 // NexusStatus defines the observed state of Nexus
 // +k8s:openapi-gen=true
 type NexusStatus struct {
@@ -198,11 +211,25 @@ type NexusStatus struct {
 	// +operator-sdk:gen-csv:customresourcedefinitions.statusDescriptors.displayName="appsv1.DeploymentStatus"
 	DeploymentStatus v1.DeploymentStatus `json:"deploymentStatus,omitempty"`
 	// Will be "OK" when this Nexus instance is up
+	// +operator-sdk:gen-csv:customresourcedefinitions.statusDescriptors=true
 	NexusStatus NexusStatusType `json:"nexusStatus,omitempty"`
 	// Gives more information about a failure status
+	// +operator-sdk:gen-csv:customresourcedefinitions.statusDescriptors=true
 	Reason string `json:"reason,omitempty"`
 	// Route for external service access
+	// +operator-sdk:gen-csv:customresourcedefinitions.statusDescriptors=true
 	NexusRoute string `json:"nexusRoute,omitempty"`
+	// ServerOperationsStatus describes the general status for the operations performed in the Nexus server instance
+	ServerOperationsStatus OperationsStatus `json:"serverOperationsStatus,omitempty"`
+}
+
+// OperationsStatus describes the status for each operation made by the operator in the deployed Nexus Server
+type OperationsStatus struct {
+	ServerReady                  bool   `json:"serverReady,omitempty"`
+	OperatorUserCreated          bool   `json:"operatorUserCreated,omitempty"`
+	CommunityRepositoriesCreated bool   `json:"communityRepositoriesCreated,omitempty"`
+	MavenCentralUpdated          bool   `json:"mavenCentralUpdated,omitempty"`
+	Reason                       string `json:"reason,omitempty"`
 }
 
 type NexusStatusType string

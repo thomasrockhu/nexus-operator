@@ -34,45 +34,42 @@ type server struct {
 	nexus     *v1alpha1.Nexus
 	k8sclient client.Client
 	nexuscli  *nexusapi.Client
-	status    *OperationStatus
-}
-
-type OperationStatus struct {
-	ServerReady                  bool
-	OperatorUserCreated          bool
-	CommunityRepositoriesCreated bool
-	MavenCentralUpdated          bool
+	status    *v1alpha1.OperationsStatus
 }
 
 var log = logger.GetLogger("server_operations")
 
-func handleServerOperations(nexus *v1alpha1.Nexus, client client.Client, nexusApiBuilder func(url, user, pass string) *nexusapi.Client) (OperationStatus, error) {
+func handleServerOperations(nexus *v1alpha1.Nexus, client client.Client, nexusAPIBuilder func(url, user, pass string) *nexusapi.Client) (v1alpha1.OperationsStatus, error) {
 	log.Debug("Initializing server operations in instance %s", nexus.Name)
-	s := server{nexus: nexus, k8sclient: client, status: &OperationStatus{}}
+	s := server{nexus: nexus, k8sclient: client, status: &v1alpha1.OperationsStatus{}}
 	if !nexus.Spec.GenerateRandomAdminPassword && s.isServerReady() {
-		s.status.ServerReady = true
 		internalEndpoint, err := s.getNexusEndpoint()
 		if err != nil {
+			s.status.Reason = err.Error()
 			return *s.status, err
 		}
 		if len(internalEndpoint) == 0 {
-			log.Warnf("Impossible to resolve endpoint for Nexus instance %s", nexus.Name)
+			s.status.Reason = fmt.Sprintf("Impossible to resolve endpoint for Nexus instance %s", nexus.Name)
+			s.status.ServerReady = false
 			return *s.status, nil
 		}
-		s.nexuscli = nexusApiBuilder(internalEndpoint, defaultAdminUsername, defaultAdminPassword)
+		s.nexuscli = nexusAPIBuilder(internalEndpoint, defaultAdminUsername, defaultAdminPassword)
 
 		if err := userOperations(&s).EnsureOperatorUser(); err != nil {
+			s.status.Reason = err.Error()
 			return *s.status, err
 		}
 		if err := repositoryOperations(&s).EnsureCommunityMavenProxies(); err != nil {
+			s.status.Reason = err.Error()
 			return *s.status, err
 		}
+		s.status.Reason = ""
 	}
 	return *s.status, nil
 }
 
 // HandleServerOperations makes all required operations in the Nexus server side, such as creating the operator user
-func HandleServerOperations(nexus *v1alpha1.Nexus, client client.Client) (OperationStatus, error) {
+func HandleServerOperations(nexus *v1alpha1.Nexus, client client.Client) (v1alpha1.OperationsStatus, error) {
 	return handleServerOperations(nexus, client, func(url, user, pass string) *nexusapi.Client {
 		return nexusapi.NewClient(url).WithCredentials(user, pass).Build()
 	})
@@ -90,5 +87,12 @@ func (s *server) getNexusEndpoint() (string, error) {
 
 // isServerReady checks if the given Nexus instance is ready to receive requests
 func (s *server) isServerReady() bool {
-	return s.nexus.Status.DeploymentStatus.AvailableReplicas > 0
+	if s.nexus.Status.DeploymentStatus.AvailableReplicas > 0 {
+		s.status.ServerReady = true
+		s.status.Reason = ""
+		return true
+	}
+	s.status.ServerReady = false
+	s.status.Reason = "Server does not have enough availble replicas"
+	return false
 }

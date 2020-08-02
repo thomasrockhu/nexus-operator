@@ -54,6 +54,9 @@ func userOperations(server *server) UserOperations {
 }
 
 func (u *userOperation) EnsureOperatorUser() error {
+	if u.nexus.Spec.ServerOperations.DisableOperatorUserCreation {
+		return nil
+	}
 	user, err := u.createOperatorUserIfNotExists()
 	if err != nil {
 		return err

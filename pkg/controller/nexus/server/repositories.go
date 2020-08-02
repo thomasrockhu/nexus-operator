@@ -43,6 +43,10 @@ func repositoryOperations(server *server) RepositoryOperations {
 }
 
 func (r *repositoryOperation) EnsureCommunityMavenProxies() error {
+	if r.nexus.Spec.ServerOperations.DisableRepositoryCreation {
+		log.Debug("Option to not create repositories is true. Skipping repository creation")
+		return nil
+	}
 	if err := r.createCommunityReposIfNotExists(); err != nil {
 		return err
 	}

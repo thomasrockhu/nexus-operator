@@ -19,6 +19,8 @@ package nexus
 
 import (
 	"context"
+	"testing"
+
 	"github.com/m88i/nexus-operator/pkg/apis/apps/v1alpha1"
 	nexusres "github.com/m88i/nexus-operator/pkg/controller/nexus/resource"
 	"github.com/m88i/nexus-operator/pkg/test"
@@ -33,7 +35,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"testing"
 )
 
 func TestReconcileNexus_Reconcile_NotPersistent(t *testing.T) {
@@ -49,6 +50,7 @@ func TestReconcileNexus_Reconcile_NotPersistent(t *testing.T) {
 			Networking: v1alpha1.NexusNetworking{
 				Expose: true,
 			},
+			ServerOperations: v1alpha1.ServerOperationsOpts{DisableOperatorUserCreation: true, DisableRepositoryCreation: true},
 		},
 	}
 
@@ -80,6 +82,12 @@ func TestReconcileNexus_Reconcile_NotPersistent(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Nil(t, route.Spec.TLS)
 	assert.Equal(t, route.Spec.Port.TargetPort.IntVal, dep.Spec.Template.Spec.Containers[0].Ports[0].ContainerPort)
+
+	err = r.client.Get(context.TODO(), req.NamespacedName, nexus)
+	assert.NoError(t, err)
+	assert.NotNil(t, nexus)
+	assert.False(t, nexus.Status.ServerOperationsStatus.ServerReady)
+	assert.NotEmpty(t, nexus.Status.ServerOperationsStatus.Reason)
 }
 
 func TestReconcileNexus_Reconcile_Persistent(t *testing.T) {
@@ -92,6 +100,7 @@ func TestReconcileNexus_Reconcile_Persistent(t *testing.T) {
 			Persistence: v1alpha1.NexusPersistence{
 				Persistent: true,
 			},
+			ServerOperations: v1alpha1.ServerOperationsOpts{DisableOperatorUserCreation: true, DisableRepositoryCreation: true},
 		},
 	}
 

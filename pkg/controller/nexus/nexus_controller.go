@@ -24,6 +24,7 @@ import (
 
 	"github.com/m88i/nexus-operator/pkg/cluster/kubernetes"
 	"github.com/m88i/nexus-operator/pkg/cluster/openshift"
+	"github.com/m88i/nexus-operator/pkg/controller/nexus/server"
 	"github.com/m88i/nexus-operator/pkg/framework"
 	"github.com/m88i/nexus-operator/pkg/logger"
 	routev1 "github.com/openshift/api/route/v1"
@@ -187,7 +188,21 @@ func (r *ReconcileNexus) Reconcile(request reconcile.Request) (result reconcile.
 		}
 	}
 
+	if err = r.ensureServerUpdates(instance); err != nil {
+		return
+	}
+
 	return
+}
+
+func (r *ReconcileNexus) ensureServerUpdates(instance *appsv1alpha1.Nexus) error {
+	status, err := server.HandleServerOperations(instance, r.client)
+	if err != nil {
+		return err
+	}
+	log.Debugf("Server Operations finished. Status is %v", status)
+	instance.Status.ServerOperationsStatus = status
+	return nil
 }
 
 func (r *ReconcileNexus) updateNexusStatus(nexus *appsv1alpha1.Nexus, cache *appsv1alpha1.Nexus, err *error) {

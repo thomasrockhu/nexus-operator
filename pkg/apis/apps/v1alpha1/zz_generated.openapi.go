@@ -243,11 +243,10 @@ func schema_pkg_apis_apps_v1alpha1_NexusSpec(ref common.ReferenceCallback) commo
 							Ref:         ref("./pkg/apis/apps/v1alpha1.NexusProbe"),
 						},
 					},
-					"disableDefaultRepos": {
+					"serverOperations": {
 						SchemaProps: spec.SchemaProps{
-							Description: "DisableDefaultRepos disables the auto-creation of Apache, JBoss and Red Hat and to add them to the Maven Public group in this Nexus instance. Default to false (always try to create the repos). Set this to true to not create them. Only works if 'GenerateRandomAdminPassword' is false.",
-							Type:        []string{"boolean"},
-							Format:      "",
+							Description: "ServerOperations describes the options for the operations made in the deployed server instance",
+							Ref:         ref("./pkg/apis/apps/v1alpha1.ServerOperationsOpts"),
 						},
 					},
 				},
@@ -255,7 +254,7 @@ func schema_pkg_apis_apps_v1alpha1_NexusSpec(ref common.ReferenceCallback) commo
 			},
 		},
 		Dependencies: []string{
-			"./pkg/apis/apps/v1alpha1.NexusNetworking", "./pkg/apis/apps/v1alpha1.NexusPersistence", "./pkg/apis/apps/v1alpha1.NexusProbe", "k8s.io/api/core/v1.ResourceRequirements"},
+			"./pkg/apis/apps/v1alpha1.NexusNetworking", "./pkg/apis/apps/v1alpha1.NexusPersistence", "./pkg/apis/apps/v1alpha1.NexusProbe", "./pkg/apis/apps/v1alpha1.ServerOperationsOpts", "k8s.io/api/core/v1.ResourceRequirements"},
 	}
 }
 
@@ -293,10 +292,16 @@ func schema_pkg_apis_apps_v1alpha1_NexusStatus(ref common.ReferenceCallback) com
 							Format:      "",
 						},
 					},
+					"serverOperationsStatus": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ServerOperationsStatus describes the general status for the operations performed in the Nexus server instance",
+							Ref:         ref("./pkg/apis/apps/v1alpha1.OperationsStatus"),
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/api/apps/v1.DeploymentStatus"},
+			"./pkg/apis/apps/v1alpha1.OperationsStatus", "k8s.io/api/apps/v1.DeploymentStatus"},
 	}
 }
