@@ -21,6 +21,7 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/m88i/aicura/nexus"
 	"github.com/m88i/nexus-operator/pkg/apis/apps/v1alpha1"
 	"github.com/m88i/nexus-operator/pkg/controller/nexus/resource/meta"
 	"github.com/m88i/nexus-operator/pkg/test"
@@ -28,8 +29,32 @@ import (
 	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+// createNewServerAndKubeCli creates a new fake server and kubernetes fake client to be used in tests for this package;
+// A nexus CR instance is also added to the Fake client context.
+func createNewServerAndKubeCli(t *testing.T, objects ...runtime.Object) (*server, client.Client) {
+	nexusInstance := &v1alpha1.Nexus{ObjectMeta: v1.ObjectMeta{Name: "nexus3", Namespace: t.Name()}}
+	objects = append(objects, nexusInstance)
+	client := test.NewFakeClientBuilder(
+		objects...).
+		Build()
+	server := &server{
+		nexus:     nexusInstance,
+		k8sclient: client,
+		nexuscli:  nexus.NewFakeClient(),
+		status:    &OperationStatus{},
+	}
+
+	return server, client
+}
+
+func nexusApiFakeBuilder(url, user, pass string) *nexus.Client {
+	return nexus.NewFakeClient()
+}
 
 func Test_server_getNexusEndpoint(t *testing.T) {
 	nexus := &v1alpha1.Nexus{
@@ -81,24 +106,40 @@ func Test_server_isServerReady(t *testing.T) {
 	assert.True(t, s.isServerReady())
 }
 
-// TODO: add fakes/mock to AICURA to make it easy to mock the server when using the API
-
-func Test_server_getOrCreateOperatorCredentials(t *testing.T) {
-	/*
-		nexus := &v1alpha1.Nexus{
-			Spec:       v1alpha1.NexusSpec{},
-			ObjectMeta: v1.ObjectMeta{Name: "nexus3", Namespace: t.Name()},
-		}
-		cli := test.NewFakeClientBuilder(nexus).Build()
-		s := server{
-			nexus:     nexus,
-			k8sclient: cli,
-		}
-		secret, err := s.getOrCreateOperatorCredentials()
-		assert.NoError(t, err)
-		assert.NotNil(t, secret)
-		assert.NotEmpty(t, secret.StringData)
-		assert.Equal(t, operatorUsername, secret.StringData[secretKeyUsername])
-		assert.NotEmpty(t, secret.StringData[secretKeyPassword])
-	*/
+func Test_handleServerOperations(t *testing.T) {
+	nexus := &v1alpha1.Nexus{
+		Spec:       v1alpha1.NexusSpec{},
+		ObjectMeta: v1.ObjectMeta{Name: "nexus3", Namespace: t.Name()},
+		Status: v1alpha1.NexusStatus{
+			DeploymentStatus: appv1.DeploymentStatus{
+				AvailableReplicas: 1,
+			},
+		},
+	}
+	svc := &corev1.Service{
+		ObjectMeta: meta.DefaultObjectMeta(nexus),
+		Spec: corev1.ServiceSpec{
+			Ports: []corev1.ServicePort{
+				{
+					Name:     "http",
+					Protocol: corev1.ProtocolTCP,
+					Port:     8081,
+					TargetPort: intstr.IntOrString{
+						IntVal: 8081,
+					},
+				},
+			},
+			Selector:        meta.GenerateLabels(nexus),
+			SessionAffinity: corev1.ServiceAffinityNone,
+		},
+	}
+	cli := test.NewFakeClientBuilder(nexus, svc, &corev1.Secret{ObjectMeta: v1.ObjectMeta{Name: nexus.Name, Namespace: nexus.Namespace}}).Build()
+	status, err := handleServerOperations(nexus, cli, nexusApiFakeBuilder)
+	assert.NoError(t, err)
+	assert.NotNil(t, status)
+	assert.True(t, status.CommunityRepositoriesCreated)
+	assert.True(t, status.OperatorUserCreated)
+	assert.True(t, status.ServerReady)
+	// see: https://github.com/m88i/aicura/issues/18
+	assert.False(t, status.MavenCentralUpdated)
 }

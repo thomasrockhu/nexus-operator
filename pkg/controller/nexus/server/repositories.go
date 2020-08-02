@@ -20,9 +20,9 @@ package server
 import "github.com/m88i/aicura/nexus"
 
 var communityMavenProxies = map[string]nexus.MavenProxyRepository{
-	"apache":  createDefaultMavenProxy("apache", "https://repo.maven.apache.org/maven2/"),
-	"red-hat": createDefaultMavenProxy("red-hat", "https://maven.repository.redhat.com/ga/"),
-	"jboss":   createDefaultMavenProxy("jboss", "https://repository.jboss.org/"),
+	"apache":  defaultMavenProxyInstance("apache", "https://repo.maven.apache.org/maven2/"),
+	"red-hat": defaultMavenProxyInstance("red-hat", "https://maven.repository.redhat.com/ga/"),
+	"jboss":   defaultMavenProxyInstance("jboss", "https://repository.jboss.org/"),
 }
 
 const (
@@ -46,6 +46,10 @@ func (r *repositoryOperation) EnsureCommunityMavenProxies() error {
 	if err := r.createCommunityReposIfNotExists(); err != nil {
 		return err
 	}
+	return r.addCommunityReposToMavenCentralGroup()
+}
+
+func (r *repositoryOperation) addCommunityReposToMavenCentralGroup() error {
 	mavenCentral, err := r.nexuscli.MavenGroupRepositoryService.GetRepoByName(mavenCentralRepoID)
 	if err != nil {
 		return err
@@ -54,6 +58,7 @@ func (r *repositoryOperation) EnsureCommunityMavenProxies() error {
 		log.Warnf("Maven Central repository group not found in the server instance, won't add community repos to the group")
 		return nil
 	}
+
 	var newMembers []string
 	for _, member := range mavenCentral.Group.MemberNames {
 		if _, ok := communityMavenProxies[member]; !ok {
@@ -61,32 +66,35 @@ func (r *repositoryOperation) EnsureCommunityMavenProxies() error {
 		}
 	}
 	mavenCentral.Group.MemberNames = append(mavenCentral.Group.MemberNames, newMembers...)
-	if err := r.nexuscli.MavenGroupRepositoryService.Update(*mavenCentral); err != nil {
-		return err
+
+	err = r.nexuscli.MavenGroupRepositoryService.Update(*mavenCentral)
+	if err == nil {
+		r.status.MavenCentralUpdated = true
 	}
-	return nil
+	return err
 }
 
 func (r *repositoryOperation) createCommunityReposIfNotExists() error {
-	var repos []nexus.MavenProxyRepository
+	var reposToAdd []nexus.MavenProxyRepository
 	for _, repo := range communityMavenProxies {
-		fetchRepo, err := r.nexuscli.MavenProxyRepositoryService.GetRepoByName(repo.Name)
+		fetchedRepo, err := r.nexuscli.MavenProxyRepositoryService.GetRepoByName(repo.Name)
 		if err != nil {
 			return err
 		}
-		if fetchRepo == nil {
-			repos = append(repos, repo)
+		if fetchedRepo == nil {
+			reposToAdd = append(reposToAdd, repo)
 		}
 	}
-	if len(repos) > 0 {
-		if err := r.nexuscli.MavenProxyRepositoryService.Add(repos...); err != nil {
+	if len(reposToAdd) > 0 {
+		if err := r.nexuscli.MavenProxyRepositoryService.Add(reposToAdd...); err != nil {
 			return err
 		}
+		r.status.CommunityRepositoriesCreated = true
 	}
 	return nil
 }
 
-func createDefaultMavenProxy(name, url string) nexus.MavenProxyRepository {
+func defaultMavenProxyInstance(name, url string) nexus.MavenProxyRepository {
 	return nexus.MavenProxyRepository{
 		Repository: nexus.Repository{
 			URL:    nexus.NewString(url),

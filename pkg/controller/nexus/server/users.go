@@ -74,6 +74,7 @@ func (u *userOperation) createOperatorUserIfNotExists() (*nexus.User, error) {
 		return nil, err
 	}
 	if user != nil {
+		u.status.OperatorUserCreated = true
 		return user, nil
 	}
 	user, err = u.createOperatorUserInstance()
@@ -87,6 +88,7 @@ func (u *userOperation) createOperatorUserIfNotExists() (*nexus.User, error) {
 		//  TODO: in case of an error here, we should remove the user from the Nexus database. Edge case: an user could manually add the credentials later to the secret with a manually created user for us.
 		return nil, err
 	}
+	u.status.OperatorUserCreated = true
 	return user, nil
 }
 

@@ -34,36 +34,48 @@ type server struct {
 	nexus     *v1alpha1.Nexus
 	k8sclient client.Client
 	nexuscli  *nexusapi.Client
+	status    *OperationStatus
+}
+
+type OperationStatus struct {
+	ServerReady                  bool
+	OperatorUserCreated          bool
+	CommunityRepositoriesCreated bool
+	MavenCentralUpdated          bool
 }
 
 var log = logger.GetLogger("server_operations")
 
-func HandleServerOperations(nexus *v1alpha1.Nexus, client client.Client) error {
+func handleServerOperations(nexus *v1alpha1.Nexus, client client.Client, nexusApiBuilder func(url, user, pass string) *nexusapi.Client) (OperationStatus, error) {
 	log.Debug("Initializing server operations in instance %s", nexus.Name)
-	s := server{nexus: nexus, k8sclient: client}
+	s := server{nexus: nexus, k8sclient: client, status: &OperationStatus{}}
 	if !nexus.Spec.GenerateRandomAdminPassword && s.isServerReady() {
+		s.status.ServerReady = true
 		internalEndpoint, err := s.getNexusEndpoint()
 		if err != nil {
-			return err
+			return *s.status, err
 		}
 		if len(internalEndpoint) == 0 {
 			log.Warnf("Impossible to resolve endpoint for Nexus instance %s", nexus.Name)
-			return nil
+			return *s.status, nil
 		}
-		// TODO: create an injection point for API creation
-		s.nexuscli = nexusapi.
-			NewClient(internalEndpoint).
-			WithCredentials(defaultAdminUsername, defaultAdminPassword).
-			Build()
+		s.nexuscli = nexusApiBuilder(internalEndpoint, defaultAdminUsername, defaultAdminPassword)
 
 		if err := userOperations(&s).EnsureOperatorUser(); err != nil {
-			return err
+			return *s.status, err
 		}
 		if err := repositoryOperations(&s).EnsureCommunityMavenProxies(); err != nil {
-			return err
+			return *s.status, err
 		}
 	}
-	return nil
+	return *s.status, nil
+}
+
+// HandleServerOperations makes all required operations in the Nexus server side, such as creating the operator user
+func HandleServerOperations(nexus *v1alpha1.Nexus, client client.Client) (OperationStatus, error) {
+	return handleServerOperations(nexus, client, func(url, user, pass string) *nexusapi.Client {
+		return nexusapi.NewClient(url).WithCredentials(user, pass).Build()
+	})
 }
 
 func (s *server) getNexusEndpoint() (string, error) {

@@ -32,6 +32,11 @@ import (
 
 var log = logger.GetLogger("security_manager")
 
+var managedObjectsRef = map[string]resource.KubernetesResource{
+	"Secret":          &core.Secret{},
+	"Service Account": &core.ServiceAccount{},
+}
+
 // Manager is responsible for creating security resources, fetching deployed ones and comparing them
 // Use with zero values will result in a panic. Use the NewManager function to get a properly initialized manager
 type Manager struct {
@@ -56,15 +61,6 @@ func (m *Manager) setDefaults() {
 	}
 }
 
-// makeDeployedGetters maps the functions to fetch deployed resources
-func (m *Manager) makeDeployedGetters() map[string]func() (resource.KubernetesResource, error) {
-	deployedGetters := make(map[string]func() (resource.KubernetesResource, error))
-	deployedGetters["Secret"] = m.getDeployedSecret
-	deployedGetters["Service Account"] = m.getDeployedSvcAccnt
-
-	return deployedGetters
-}
-
 // GetRequiredResources returns the resources initialized by the Manager
 func (m *Manager) GetRequiredResources() ([]resource.KubernetesResource, error) {
 	log.Debugf("Creating Service Account (%s)", m.nexus.Name)
@@ -74,30 +70,14 @@ func (m *Manager) GetRequiredResources() ([]resource.KubernetesResource, error) 
 // GetDeployedResources returns the security resources deployed on the cluster
 func (m *Manager) GetDeployedResources() ([]resource.KubernetesResource, error) {
 	var resources []resource.KubernetesResource
-	for resType, getter := range m.makeDeployedGetters() {
-		if r, err := getter(); err == nil {
-			resources = append(resources, r)
+	for resType, resRef := range managedObjectsRef {
+		if err := framework.Fetch(m.client, framework.Key(m.nexus), resRef); err == nil {
+			resources = append(resources, resRef)
 		} else if !errors.IsNotFound(err) {
 			return nil, fmt.Errorf("could not fetch Resource %s (%s): %v", resType, m.nexus.Name, err)
 		}
 	}
 	return resources, nil
-}
-
-func (m *Manager) getDeployedSecret() (resource.KubernetesResource, error) {
-	secret := &core.Secret{}
-	if err := framework.Fetch(m.client, framework.Key(m.nexus), secret); err != nil {
-		return nil, err
-	}
-	return secret, nil
-}
-
-func (m *Manager) getDeployedSvcAccnt() (resource.KubernetesResource, error) {
-	account := &core.ServiceAccount{}
-	if err := framework.Fetch(m.client, framework.Key(m.nexus), account); err != nil {
-		return nil, err
-	}
-	return account, nil
 }
 
 // GetCustomComparator returns the custom comp function used to compare a security resource.

@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	"github.com/m88i/nexus-operator/pkg/apis/apps/v1alpha1"
+	"github.com/m88i/nexus-operator/pkg/framework"
 	"github.com/m88i/nexus-operator/pkg/test"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
@@ -134,14 +135,13 @@ func TestManager_getDeployedSvcAccnt(t *testing.T) {
 	}
 
 	// first, test without creating the svcAccnt
-	svcAccnt, err := mgr.getDeployedSvcAccnt()
-	assert.Nil(t, svcAccnt)
+	err := framework.Fetch(mgr.client, framework.Key(mgr.nexus), managedObjectsRef["Service Account"])
 	assert.True(t, errors.IsNotFound(err))
 
 	// now test after creating the svcAccnt
-	svcAccnt = &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: mgr.nexus.Name, Namespace: mgr.nexus.Namespace}}
+	svcAccnt := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: mgr.nexus.Name, Namespace: mgr.nexus.Namespace}}
 	assert.NoError(t, mgr.client.Create(ctx.TODO(), svcAccnt))
-	svcAccnt, err = mgr.getDeployedSvcAccnt()
+	err = framework.Fetch(mgr.client, framework.Key(svcAccnt), svcAccnt)
 	assert.NotNil(t, svcAccnt)
 	assert.NoError(t, err)
 }
