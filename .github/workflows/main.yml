@@ -1,33 +1,144 @@
-# This is a basic workflow to help you get started with Actions
-
-name: CI
-
-# Controls when the action will run. Triggers the workflow on push or pull request
-# events but only for the master branch
+name: Nexus Operator Integration Checks
 on:
-  push:
-    branches: [ master ]
   pull_request:
-    branches: [ master ]
-
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+    paths-ignore:
+      - "docs/**"
+      - "README.md"
+      - "CONTRIBUTING.md"
+      - "examples/**"
+      - "LICENSE"
+      - "LICENSE_NOTICE"
+      - "Makefile"
+      - ".github/ISSUE_TEMPLATE/**"
+    branches:
+      - master
+env:
+  OPERATOR_SDK_VERSION: v0.18.1
+  GO_VERSION: 1.14
 jobs:
-  # This workflow contains a single job called "build"
-  build:
-    # The type of runner that the job will run on
+  golint:
+    name: Lint
     runs-on: ubuntu-latest
-
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-    # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-    - uses: actions/checkout@v2
+      - uses: actions/checkout@v2
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v1
+        with:
+          # Required: the version of golangci-lint is required and must be specified without patch version: we always use the latest patch version.
+          version: v1.27
+          args: --enable=golint --timeout=2m
 
-    # Runs a single command using the runners shell
-    - name: Run a one-line script
-      run: echo Hello, world!
+  unit_test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Go ${{ env.GO_VERSION }}
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ env.GO_VERSION }}
+        id: go
 
-    # Runs a set of commands using the runners shell
-    - name: Run a multi-line script
-      run: |
-        echo Add other actions to build,
-        echo test, and deploy your project.
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Cache dependencies
+        uses: actions/cache@v1
+        with:
+          path: ~/go/pkg/mod/cache
+          key: ${{ runner.os }}-go-cache-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-cache-
+
+      - name: Mod Tidy
+        run: |
+          go mod tidy
+
+      - name: FMT
+        run: gofmt -s -l -w cmd/ pkg/ version/
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test Packages
+        run: go test ./pkg/... -count=1 -coverprofile=coverage.txt -covermode=atomic
+      - name: Validate codcov yaml file
+        run: curl -vvv --data-binary @codecov.yml https://codecov.io/validate
+      - name: Echo env variables
+        run: echo $GITHUB_ACTION
+      - name: Send Coverage Report
+        uses: codecov/codecov-action@v1
+        with:
+          file: ./coverage.txt
+          flags: operator
+          name: operator-test
+          fail_ci_if_error: true
+      - name: Send Coverage Report with bash uploader
+        run: bash <(curl -s https://codecov.io/bash) -f ./coverage.txt -n operator-test -F operator -Z
+
+  integration_tests:
+    name: Integration Tests
+    # we should wait for an ok from the other two
+    needs: [golint, unit_test]
+    runs-on: ubuntu-latest
+    env:
+      CLUSTER_NAME: operator-test
+      KIND_VERSION: v0.8.1
+      CREATE_NAMESPACE: false
+      NAMESPACE_E2E: default
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+      - name: Set up Go ${{ env.GO_VERSION }}
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ env.GO_VERSION }}
+        id: go
+      - name: Cache dependencies
+        uses: actions/cache@v1
+        with:
+          path: ~/go/pkg/mod/cache
+          key: ${{ runner.os }}-go-cache-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-cache-
+
+      - name: Cache Binaries
+        uses: actions/cache@v1
+        with:
+          path: ~/go/bin/
+          key: ${{ runner.os }}-go-${{ env.GO_VERSION }}
+          restore-keys: |
+            ${{ runner.os }}-go-${{ env.GO_VERSION }}
+
+      - name: Install Operator SDK
+        run: |
+          ./hack/ci/install-operator-sdk.sh
+
+      - name: Install KIND
+        run: |
+          ./hack/ci/install-kind.sh
+          echo "::add-path::$GITHUB_WORKSPACE/bin"
+
+      - name: Start KIND
+        run: ./hack/ci/start-kind.sh
+
+      - name: Generate Manifests
+        run: ./hack/generate-manifests.sh
+
+      - name: Build Operator Image
+        env:
+          BUILDER: docker
+          CUSTOM_BASE_IMAGE: alpine:latest
+        run: |
+          ./hack/go-build.sh
+
+      - name: Load Operator Image
+        run: ./hack/ci/load-operator-image.sh
+
+      - name: Run e2e test
+        env:
+          RUN_WITH_IMAGE: true
+          TIMEOUT_E2E: 20m
+        run: ./hack/run-e2e-test.sh
+
+      - name: Run Operator OLM Integration Test
+        run: ./hack/ci/operator-olm-test.sh

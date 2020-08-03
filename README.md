@@ -6,7 +6,6 @@
 
 Table of Contents
 =================
-
    * [Nexus Operator](#nexus-operator)
       * [Pre Requisites](#pre-requisites)
       * [Quick Install](#quick-install)
