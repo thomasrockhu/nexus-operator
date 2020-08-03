@@ -72,6 +72,8 @@ jobs:
           flags: operator
           name: operator-test
           fail_ci_if_error: true
+      - name: Send Coverage Report with bash uploader
+        run: bash <(curl -s https://codecov.io/bash) -f ./coverage.txt -n operator-test -F operator -Z
 
   integration_tests:
     name: Integration Tests
